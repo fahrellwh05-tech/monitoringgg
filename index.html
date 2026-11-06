@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parfum Otomatis - Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0b1220;
+    --card: #131c2e;
+    --border: #1f2b45;
+    --text: #e6edf7;
+    --muted: #7d8ba6;
+    --accent: #38bdf8;
+    --green: #22c55e;
+    --red: #ef4444;
+    --orange: #f59e0b;
+    --yellow: #eab308;
+    --gray: #475569;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(900px 500px at 10% -10%, rgba(56,189,248,.12), transparent 60%),
+      radial-gradient(800px 500px at 100% 0%, rgba(34,197,94,.08), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    min-height: 100vh;
+    padding: 28px;
+  }
+  .wrap { max-width: 1150px; margin: 0 auto; }
+
+  header {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    align-items: center; justify-content: space-between;
+    margin-bottom: 22px;
+  }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -.5px; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+  .pills { display: flex; gap: 10px; flex-wrap: wrap; }
+  .pill {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--card); border: 1px solid var(--border);
+    padding: 8px 14px; border-radius: 999px; font-size: 13px;
+  }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--gray); box-shadow: 0 0 0 0 transparent;
+    transition: background .3s;
+  }
+  .dot.on { background: var(--green); box-shadow: 0 0 10px var(--green); }
+  .dot.off { background: var(--red); box-shadow: 0 0 10px var(--red); }
+
+  .banner {
+    background: var(--gray);
+    border-radius: 18px;
+    padding: 20px;
+    text-align: center;
+    font-size: 22px; font-weight: 700; letter-spacing: 1.5px;
+    margin-bottom: 18px;
+    transition: background .4s, box-shadow .4s;
+  }
+
+  .cards {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    margin-bottom: 18px;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 18px; padding: 18px 22px;
+    transition: transform .2s, border-color .2s;
+  }
+  .card:hover { transform: translateY(-2px); border-color: #2c3d63; }
+  .card .t {
+    font-size: 12px; font-weight: 700; letter-spacing: 1px;
+    color: var(--muted); text-transform: uppercase;
+  }
+  .card .v {
+    font-size: 40px; font-weight: 700; margin: 6px 0 2px;
+    transition: color .3s;
+  }
+  .card .v small { font-size: 18px; font-weight: 500; color: var(--muted); }
+  .card .s { font-size: 12px; color: var(--muted); }
+
+
+  .reset-box {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 18px; padding: 18px 22px; margin-bottom: 18px;
+  }
+  .reset-box .t {
+    font-size: 12px; font-weight: 700; letter-spacing: 1px;
+    color: var(--muted); margin-bottom: 10px;
+  }
+  .reset-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  #btnReset {
+    border: 0; border-radius: 10px; padding: 12px 18px;
+    background: var(--orange); color: #111827; font-weight: 700;
+    cursor: pointer; font-size: 14px;
+  }
+  #btnReset:disabled { opacity: .45; cursor: not-allowed; }
+  #resetInfo { color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+  .chart-box {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 18px; padding: 18px 22px 22px;
+  }
+  .chart-box .t {
+    font-size: 12px; font-weight: 700; letter-spacing: 1px;
+    color: var(--muted); margin-bottom: 12px;
+  }
+  .chart-area { position: relative; height: 320px; }
+
+  .log-box {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 18px; padding: 18px 22px 22px; margin-top: 18px;
+  }
+  .log-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+  }
+  .log-head .t {
+    font-size: 12px; font-weight: 700; letter-spacing: 1px; color: var(--muted);
+  }
+  .log-head .n { font-size: 12px; color: var(--muted); }
+  .log-scroll { max-height: 340px; overflow: auto; border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    position: sticky; top: 0; background: #0f1828; color: var(--muted);
+    text-align: left; font-size: 11px; letter-spacing: .8px;
+    text-transform: uppercase; padding: 10px 12px; z-index: 1;
+  }
+  tbody td {
+    padding: 8px 12px; border-top: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+  }
+  tbody tr:first-child { background: rgba(56,189,248,.08); }
+  .card.aktif {
+    border-color: var(--green);
+    box-shadow: 0 0 24px rgba(34,197,94,.25);
+  }
+  .card.aktif .s { color: var(--green); font-weight: 600; font-size: 13px; }
+  .fan-icon { display: inline-block; animation: putar 1s linear infinite; }
+  @keyframes putar { to { transform: rotate(360deg); } }
+  .c-on { color: var(--green); font-weight: 600; }
+  .c-off { color: var(--muted); }
+
+  footer { margin-top: 16px; color: var(--muted); font-size: 12px; }
+  footer.warn { color: var(--orange); }
+
+  @media (max-width: 600px) {
+    body { padding: 16px; }
+    h1 { font-size: 22px; }
+    .card .v { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>Parfum Otomatis</h1>
+      <div class="sub">Monitoring real-time via MQTT &bull; BME680 + ESP32</div>
+    </div>
+    <div class="pills">
+      <div class="pill"><span class="dot" id="dotBroker"></span><span id="lblBroker">Broker: terputus</span></div>
+      <div class="pill"><span class="dot" id="dotEsp"></span><span id="lblEsp">ESP32: -</span></div>
+    </div>
+  </header>
+
+  <div class="banner" id="banner">MENUNGGU DATA...</div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="t">Resistansi Gas</div>
+      <div class="v" id="vGas">--<small> kΩ</small></div>
+      <div class="s" id="sGas">Mentah: -</div>
+    </div>
+    <div class="card">
+      <div class="t">Setpoint</div>
+      <div class="v" id="vSet" style="color:var(--accent)">--<small> kΩ</small></div>
+      <div class="s">Di bawah ini = terdeteksi</div>
+    </div>
+    <div class="card" id="cFan">
+      <div class="t">Blower</div>
+      <div class="v" id="vFan">--</div>
+      <div class="s" id="sFan">-</div>
+    </div>
+    <div class="card">
+      <div class="t">Piezo</div>
+      <div class="v" id="vPzo">--</div>
+      <div class="s" id="sPzo">-</div>
+    </div>
+  </div>
+
+
+  <div class="reset-box">
+    <div class="t">KALIBRASI BASELINE</div>
+    <div class="reset-row">
+      <button id="btnReset" type="button" disabled>↻ RESET BASELINE</button>
+      <span id="resetInfo">Hubungkan ke broker untuk mengaktifkan tombol.</span>
+    </div>
+    <p style="color:var(--muted);font-size:12px;margin-top:10px;line-height:1.5">
+      Gunakan hanya saat ruangan sudah normal dan bebas parfum. Pembacaan sensor saat reset
+      akan dijadikan baseline normal yang baru.
+    </p>
+  </div>
+
+  <div class="chart-box">
+    <div class="t">TREN RESISTANSI GAS</div>
+    <div class="chart-area"><canvas id="chart"></canvas></div>
+  </div>
+
+  <div class="log-box">
+    <div class="log-head">
+      <div class="t">DATA LIVE</div>
+      <div class="n" id="logCount">0 data</div>
+    </div>
+    <div class="log-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Waktu</th>
+            <th>Gas mentah (kΩ)</th>
+            <th>Gas rata-rata (kΩ)</th>
+            <th>Setpoint (kΩ)</th>
+            <th>Blower</th>
+            <th>Piezo</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer id="footer">Belum ada data</footer>
+</div>
+
+<script>
+// ================= KONFIGURASI =================
+const BROKER_URL   = "wss://broker.hivemq.com:8884/mqtt";
+const TOPIC_DATA   = "z";
+const TOPIC_STATUS = "ruanganparfum/status";
+
+const TOPIC_COMMAND = "ruanganparfum/perintah";
+const TOPIC_ACK     = "ruanganparfum/ack";
+const MAX_TITIK    = 150;
+const STALE_MS     = 6000;
+
+const STATUS_STYLE = {
+  pemanasan:    { teks: "PEMANASAN SENSOR",       warna: "#f59e0b" },
+  menstabilkan: { teks: "MENSTABILKAN PEMBACAAN", warna: "#eab308" },
+  terdeteksi:   { teks: "BAU TERDETEKSI",         warna: "#ef4444" },
+  normal:       { teks: "KONDISI NORMAL",         warna: "#22c55e" }
+};
+
+// ================= ELEMEN =================
+const $ = (id) => document.getElementById(id);
+let dataTerakhir = 0;
+
+// ================= GRAFIK =================
+const chart = new Chart($("chart"), {
+  type: "line",
+  data: {
+    labels: [],
+    datasets: [
+      {
+        label: "Gas (rata-rata)",
+        data: [],
+        borderColor: "#38bdf8",
+        backgroundColor: "rgba(56,189,248,.15)",
+        fill: true, tension: 0.35, borderWidth: 2.5, pointRadius: 0
+      },
+      {
+        label: "Setpoint",
+        data: [],
+        borderColor: "#ef4444",
+        borderDash: [6, 6],
+        borderWidth: 1.8, pointRadius: 0, fill: false
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { labels: { color: "#e6edf7", usePointStyle: true, boxWidth: 8 } }
+    },
+    scales: {
+      x: {
+        ticks: { color: "#7d8ba6", maxTicksLimit: 8 },
+        grid: { color: "rgba(31,43,69,.6)" }
+      },
+      y: {
+        title: { display: true, text: "kΩ", color: "#7d8ba6" },
+        ticks: { color: "#7d8ba6" },
+        grid: { color: "rgba(31,43,69,.6)" }
+      }
+    }
+  }
+});
+
+// ================= TAMPILAN =================
+function setBroker(ok) {
+  $("dotBroker").className = "dot " + (ok ? "on" : "off");
+  $("lblBroker").textContent = ok ? "Broker: terhubung" : "Broker: terputus";
+}
+
+function setEsp(online) {
+  $("dotEsp").className = "dot " + (online ? "on" : "off");
+  $("lblEsp").textContent = online ? "ESP32: online" : "ESP32: offline";
+}
+
+const MAX_BARIS = 60;
+let totalData = 0;
+
+function sel(teks, kelas, warna) {
+  const td = document.createElement("td");
+  td.textContent = teks;           // textContent: aman dari isi aneh di broker publik
+  if (kelas) td.className = kelas;
+  if (warna) td.style.color = warna;
+  return td;
+}
+
+function tambahBaris(gas, nilai, sp, fan, pzo, status) {
+  const st = STATUS_STYLE[status] || { warna: "#7d8ba6" };
+  const tr = document.createElement("tr");
+  tr.append(
+    sel(new Date().toLocaleTimeString("id-ID")),
+    sel(gas.toFixed(2)),
+    sel(nilai.toFixed(2)),
+    sel(sp.toFixed(1)),
+    sel(fan ? "ON" : "OFF", fan ? "c-on" : "c-off"),
+    sel(pzo ? "ON" : "OFF", pzo ? "c-on" : "c-off"),
+    sel("● " + (status || "-"), "", st.warna)
+  );
+  const body = $("logBody");
+  body.prepend(tr);                       // data terbaru di paling atas
+  while (body.children.length > MAX_BARIS) body.removeChild(body.lastChild);
+  totalData++;
+  $("logCount").textContent = totalData + " data diterima • menampilkan " +
+    body.children.length + " terakhir";
+}
+
+function tampilkan(d) {
+  const gas = Number(d.gas) || 0;
+  const avg = Number(d.gas_avg) || 0;
+  const sp  = Number(d.setpoint) || 0;
+  const fan = Number(d.blower) === 1;
+  const pzo = Number(d.piezo) === 1;
+  const status = String(d.status || "").toLowerCase();
+  const nilai = avg > 0 ? avg : gas;
+
+  dataTerakhir = Date.now();
+
+  // Kartu
+  $("vGas").innerHTML = nilai.toFixed(1) + "<small> kΩ</small>";
+  $("vGas").style.color = (avg > 0 && avg < sp) ? "var(--red)" : "var(--text)";
+  $("sGas").textContent = "Mentah: " + gas.toFixed(1) + " kΩ";
+  $("vSet").innerHTML = sp.toFixed(1) + "<small> kΩ</small>";
+
+  $("vFan").textContent = fan ? "ON" : "OFF";
+  $("vFan").style.color = fan ? "var(--green)" : "var(--muted)";
+  $("sFan").innerHTML = fan ? '<span class="fan-icon">✢</span> Kipas bekerja' : "Kipas mati";
+  $("cFan").classList.toggle("aktif", fan);
+
+  $("vPzo").textContent = pzo ? "ON" : "OFF";
+  $("vPzo").style.color = pzo ? "var(--orange)" : "var(--muted)";
+  $("sPzo").textContent = pzo ? "Menyemprot..." : "Standby";
+
+  // Banner
+  const st = STATUS_STYLE[status] || { teks: status.toUpperCase() || "-", warna: "#475569" };
+  $("banner").textContent = st.teks;
+  $("banner").style.background = st.warna;
+  $("banner").style.boxShadow = "0 0 30px " + st.warna + "55";
+
+  // Tabel data live
+  tambahBaris(gas, nilai, sp, fan, pzo, status);
+
+  // Grafik
+  if (nilai > 0) {
+    const jam = new Date().toLocaleTimeString("id-ID");
+    chart.data.labels.push(jam);
+    chart.data.datasets[0].data.push(nilai);
+    chart.data.datasets[1].data.push(sp);
+    if (chart.data.labels.length > MAX_TITIK) {
+      chart.data.labels.shift();
+      chart.data.datasets.forEach((ds) => ds.data.shift());
+    }
+    chart.update();
+  }
+}
+
+// ================= MQTT =================
+const client = mqtt.connect(BROKER_URL, {
+  clientId: "web-karim-" + Math.random().toString(16).slice(2, 8),
+  reconnectPeriod: 2000,
+  keepalive: 30
+});
+
+client.on("connect", () => {
+  setBroker(true);
+  client.subscribe([TOPIC_DATA, TOPIC_STATUS, TOPIC_ACK]);
+  $("btnReset").disabled = false;
+  $("resetInfo").textContent = "Terhubung. Tombol reset siap digunakan.";
+});
+client.on("reconnect", () => {
+  $("btnReset").disabled = true;
+  $("resetInfo").textContent = "Menyambungkan ulang ke broker...";
+});
+client.on("close", () => {
+  setBroker(false);
+  $("btnReset").disabled = true;
+  $("resetInfo").textContent = "Broker terputus. Tombol reset dinonaktifkan.";
+});
+client.on("close", () => setBroker(false));
+client.on("error", (e) => console.error("MQTT error:", e));
+
+client.on("message", (topic, payload) => {
+  const isi = payload.toString();
+  if (topic === TOPIC_STATUS) {
+    setEsp(isi.trim().toLowerCase() === "online");
+  } else if (topic === TOPIC_ACK) {
+    const balasan = {
+      RESET_OK: "✓ Baseline berhasil di-reset oleh ESP32.",
+      RESET_GAGAL_SENSOR_BELUM_SIAP: "Reset gagal: sensor belum siap atau belum memiliki 5 sampel.",
+      PERINTAH_TIDAK_DIKENAL: "ESP32 menerima perintah yang tidak dikenal."
+    };
+    $("resetInfo").textContent = balasan[isi.trim()] || ("Balasan ESP32: " + isi);
+    $("btnReset").disabled = !client.connected;
+  } else if (topic === TOPIC_DATA) {
+    try { tampilkan(JSON.parse(isi)); }
+    catch (e) { console.warn("JSON tidak valid:", isi); }
+  }
+});
+
+// ================= RESET BASELINE DARI WEBSITE =================
+$("btnReset").addEventListener("click", () => {
+  if (!client.connected) {
+    $("resetInfo").textContent = "Broker belum terhubung.";
+    return;
+  }
+
+  const yakin = confirm(
+    "Reset baseline menggunakan pembacaan sensor saat ini? " +
+    "Pastikan ruangan sedang normal dan bebas parfum."
+  );
+  if (!yakin) return;
+
+  $("btnReset").disabled = true;
+  $("resetInfo").textContent = "Perintah reset dikirim. Menunggu konfirmasi dari ESP32...";
+
+  client.publish(TOPIC_COMMAND, "RESET", { qos: 0, retain: false }, (err) => {
+    if (err) {
+      $("resetInfo").textContent = "Gagal mengirim perintah: " + err.message;
+      $("btnReset").disabled = !client.connected;
+    }
+  });
+});
+
+// ================= CEK DATA BASI =================
+setInterval(() => {
+  const f = $("footer");
+  if (!dataTerakhir) return;
+  const selisih = Date.now() - dataTerakhir;
+  if (selisih > STALE_MS) {
+    f.className = "warn";
+    f.textContent = "⚠ Tidak ada data baru selama " + Math.floor(selisih / 1000) + " detik";
+  } else {
+    f.className = "";
+    f.textContent = "Update terakhir: " +
+      new Date(dataTerakhir).toLocaleTimeString("id-ID") +
+      "  •  broker.hivemq.com  •  " + TOPIC_DATA;
+  }
+}, 1000);
+</script>
+</body>
+</html>
